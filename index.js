@@ -6,19 +6,28 @@ import fs from "fs";
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
-
+app.use(express.static("/tmp"));
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
 // 1️⃣ vyzveme volajícího + nahrajeme hlas
-app.post("/voice", (req, res) => {
+app.post("/voice", async (req, res) => {
+  const text = "Dobrý den. Prosím, řekněte svůj požadavek.";
+
+  const speech = await openai.audio.speech.create({
+    model: "gpt-4o-mini-tts",
+    voice: "alloy",
+    input: text
+  });
+
+  const audioBuffer = Buffer.from(await speech.arrayBuffer());
+  fs.writeFileSync("/tmp/welcome.mp3", audioBuffer);
+
   res.type("text/xml");
   res.send(`
 <Response>
-  <Say>
-    Please say your request after the tone.
-  </Say>
+  <Play>${req.protocol}://${req.get("host")}/welcome.mp3</Play>
   <Record
     timeout="5"
     maxLength="15"
@@ -28,6 +37,7 @@ app.post("/voice", (req, res) => {
 </Response>
 `);
 });
+
 
 // 2️⃣ po nahrání pošleme audio do OpenAI STT
 app.post("/process", async (req, res) => {
