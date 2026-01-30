@@ -1,28 +1,27 @@
 import express from "express";
 import bodyParser from "body-parser";
+import OpenAI from "openai";
+import fs from "fs";
+import path from "path";
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 
-let lastAudio = null;
-
-app.get("/audio", (req, res) => {
-  if (!lastAudio) return res.status(404).send("No audio");
-  res.set("Content-Type", "audio/mpeg");
-  res.send(lastAudio);
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-// 1️⃣ první krok – vyzveme k mluvení a nahrajeme hlas
+// 1️⃣ vyzveme k mluvení + nahrajeme hlas
 app.post("/voice", (req, res) => {
   res.type("text/xml");
   res.send(`
 <Response>
-  <Say language="cs-CZ">
+  <Say>
     Prosím, řekněte svůj požadavek po zaznění tónu.
   </Say>
   <Record
     timeout="5"
-    maxLength="10"
+    maxLength="15"
     action="/process"
     method="POST"
   />
@@ -30,47 +29,43 @@ app.post("/voice", (req, res) => {
 `);
 });
 
-// 2️⃣ Twilio pošle nahrávku sem
+// 2️⃣ zpracujeme nahrávku přes OpenAI STT
 app.post("/process", async (req, res) => {
   try {
     const recordingUrl = req.body.RecordingUrl + ".wav";
 
-    // stáhneme audio
+    // stáhneme audio z Twilia
     const audioRes = await fetch(recordingUrl);
     const audioBuffer = Buffer.from(await audioRes.arrayBuffer());
 
-    // pošleme do OpenAI (STT)
-    const sttRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: (() => {
-        const form = new FormData();
-        form.append("file", audioBuffer, "speech.wav");
-        form.append("model", "gpt-4o-transcribe");
-        form.append("language", "cs");
-        return form;
-      })()
+    // uložíme do dočasného souboru
+    const filePath = "/tmp/recording.wav";
+    fs.writeFileSync(filePath, audioBuffer);
+
+    // pošleme do OpenAI STT
+    const transcription = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(filePath),
+      model: "gpt-4o-transcribe",
+      language: "cs"
     });
 
-    const result = await sttRes.json();
-    console.log("STT TEXT:", result.text);
+    console.log("OPENAI STT TEXT:", transcription.text);
 
     res.type("text/xml");
     res.send(`
 <Response>
-  <Say language="cs-CZ">
+  <Say>
     Děkuji, zaznamenala jsem váš požadavek.
   </Say>
 </Response>
 `);
   } catch (err) {
-    console.error("STT ERROR:", err.message);
+    console.error("OPENAI STT ERROR:", err);
+
     res.type("text/xml");
     res.send(`
 <Response>
-  <Say language="cs-CZ">
+  <Say>
     Omlouváme se, požadavek se nepodařilo zpracovat.
   </Say>
 </Response>
@@ -83,4 +78,6 @@ app.get("/", (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log("Server běží"));
+app.listen(port, () => {
+  console.log("Server běží na portu " + port);
+});
