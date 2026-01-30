@@ -44,7 +44,7 @@ app.post("/process", async (req, res) => {
     // OpenAI STT
     const transcription = await openai.audio.transcriptions.create({
       file: fs.createReadStream(filePath),
-      model: "gpt-4o-transcribe",
+      model: "whisper-1",
       language: "cs"
     });
 
