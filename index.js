@@ -6,7 +6,6 @@ app.use(bodyParser.urlencoded({ extended: false }));
 
 let lastAudio = null;
 
-// endpoint pro přehrání audia
 app.get("/audio", (req, res) => {
   if (!lastAudio) {
     return res.status(404).send("No audio");
@@ -15,35 +14,54 @@ app.get("/audio", (req, res) => {
   res.send(lastAudio);
 });
 
-// hovor
 app.post("/voice", async (req, res) => {
-  const text =
-    "Dobrý den, tady je automatická recepce. Prosím, řekněte svůj požadavek.";
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY missing");
+    }
 
-  const openaiRes = await fetch("https://api.openai.com/v1/audio/speech", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini-tts",
-      voice: "alloy",
-      input: text
-    })
-  });
+    const text =
+      "Dobrý den, tady je automatická recepce. Prosím, řekněte svůj požadavek.";
 
-  const buffer = Buffer.from(await openaiRes.arrayBuffer());
-  lastAudio = buffer;
+    const openaiRes = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini-tts",
+        voice: "alloy",
+        input: text
+      })
+    });
 
-  const twiml = `
+    if (!openaiRes.ok) {
+      const errText = await openaiRes.text();
+      throw new Error("OpenAI error: " + errText);
+    }
+
+    lastAudio = Buffer.from(await openaiRes.arrayBuffer());
+
+    res.type("text/xml");
+    res.send(`
 <Response>
   <Play>https://${req.headers.host}/audio</Play>
 </Response>
-`;
+`);
+  } catch (err) {
+    console.error("VOICE ERROR:", err.message);
 
-  res.type("text/xml");
-  res.send(twiml);
+    // ⛑️ ZÁCHRANNÁ ODPOVĚĎ – TWILIO NIKDY NESPADNE
+    res.type("text/xml");
+    res.send(`
+<Response>
+  <Say language="cs-CZ">
+    Omlouváme se, systém je dočasně nedostupný. Zkuste to prosím později.
+  </Say>
+</Response>
+`);
+  }
 });
 
 app.get("/", (req, res) => {
