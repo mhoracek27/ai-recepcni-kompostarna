@@ -4,15 +4,26 @@ import bodyParser from "body-parser";
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 
+let lastAudio = null;
+
+// endpoint pro přehrání audia
+app.get("/audio", (req, res) => {
+  if (!lastAudio) {
+    return res.status(404).send("No audio");
+  }
+  res.set("Content-Type", "audio/mpeg");
+  res.send(lastAudio);
+});
+
+// hovor
 app.post("/voice", async (req, res) => {
   const text =
     "Dobrý den, tady je automatická recepce. Prosím, řekněte svůj požadavek.";
 
-  // Zavoláme OpenAI – text → hlas
-  const audioResponse = await fetch("https://api.openai.com/v1/audio/speech", {
+  const openaiRes = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -22,12 +33,12 @@ app.post("/voice", async (req, res) => {
     })
   });
 
-  const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+  const buffer = Buffer.from(await openaiRes.arrayBuffer());
+  lastAudio = buffer;
 
-  // Twilio odpověď: přehraj audio
   const twiml = `
 <Response>
-  <Play>data:audio/mp3;base64,${audioBuffer.toString("base64")}</Play>
+  <Play>https://${req.headers.host}/audio</Play>
 </Response>
 `;
 
