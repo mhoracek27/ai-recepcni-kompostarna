@@ -59,7 +59,7 @@ app.post("/process", async (req, res) => {
 </Response>
 `);
   } catch (err) {
-    console.error("STT ERROR:", err.message);
+    console.error("STT ERROR FULL:", err);
 
     res.type("text/xml");
     res.send(`
