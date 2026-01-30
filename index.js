@@ -34,7 +34,16 @@ app.post("/process", async (req, res) => {
     const recordingUrl = req.body.RecordingUrl + ".wav";
 
     // stáhneme audio z Twilia
-    const audioRes = await fetch(recordingUrl);
+    const audioRes = await fetch(recordingUrl, {
+  headers: {
+    Authorization:
+      "Basic " +
+      Buffer.from(
+        process.env.TWILIO_ACCOUNT_SID + ":" + process.env.TWILIO_AUTH_TOKEN
+      ).toString("base64")
+  }
+});
+
     const audioBuffer = Buffer.from(await audioRes.arrayBuffer());
 
     // uložíme do dočasného souboru
